@@ -1,0 +1,74 @@
+{
+	"info": {
+		"_postman_id": "03a0817c-f519-487b-9623-6aeed68d6d73",
+		"name": "Drone_Telemetry_Project",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "50920646"
+	},
+	"item": [
+		{
+			"name": "Valid Payload (201 Created)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"drone_id\": \"DRONE_MANUAL_TEST_01\",\n  \"latitude\": 36.1699,\n  \"longitude\": -115.1398,\n  \"battery_level\": 98,\n  \"timestamp\": \"2025-12-18T10:00:00Z\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:5000/api/telemetry",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "5000",
+					"path": [
+						"api",
+						"telemetry"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Invalid Payload – Missing Latitude (400)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"drone_id\": \"DRONE_BAD_TEST_01\",\n  \"longitude\": -115.1398,\n  \"battery_level\": 50\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:5000/api/telemetry",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "5000",
+					"path": [
+						"api",
+						"telemetry"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
