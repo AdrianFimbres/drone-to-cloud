@@ -37,34 +37,35 @@ drone-to-cloud/
 ### Scenario 1: The service crash
 * Simulation: While the client is running, manually terminate the Flask server process (Ctrl+C in terminal).
 
-* Symptom: Client logs **[Errno 111] Connection refused**.
+* Symptom: Client logs a **Connection refused** error with an OS-specific errno code (`61` on macOS, `111` on Linux, `10061` on Windows).
 
 * Diagnosis: Ping works but the application port is closed.
 
 ### Scenario 2: The firewall block
-* Simulation: Configure macOS Firewall to "Block incoming connections" for Python.
+* Simulation: Configure your OS Firewall to "Block incoming connections" for Python.
 
-* Symptom: Client logs **timeout** after 5s hang.
+* Symptom: Client logs `timeout` after `5s` hang.
 
 * Diagnosis: The system firewall is dropping packets before they reach the application.
 
 ### Scenario 3: Integration failure (bad data)
 * Simulation: Modify `drone_client.py` to comment out the latitude field in the JSON payload (this will send incomplete JSON payloads.)
 
-* Symptom: Server responds with **HTTP 400 Bad Request**.
+* Symptom: Server responds with `HTTP 400 Bad Request`.
 
 * Diagnosis: Connection is good, but the JSON format is invalid.
 
 ### Scenario 4: Network degradation (weak signal)
-* Simulation: Modified client script to introduce random latency (0.5s–2s) and 20% packet drop rate.
+* Simulation: Modify client script to introduce random latency (0.5s–2s) and 20% packet drop rate.
 
 * Symptom: Dashboard updates become choppy; logs show intermittent gaps but no hard errors.
 
-* Diagnosis: Ping works and the server remains reachable (we can rule out a crash) as logs show sporadic 200 OKs. The issue is network instability (latency and packet loss) rather than the application failing.
+* Diagnosis: Ping works and the server remains reachable (we can rule out a crash) as logs show sporadic `200 OK`. The issue is network instability (latency and packet loss) rather than the application failing.
 
 * Additional note: This scenario can sometimes be misdiagnosed as an application failure, leading to unnecessary engineering escalations.
 
 ## Scenarios diagram
+
 ```mermaid
 sequenceDiagram
     participant Drone as Drone client
@@ -109,11 +110,11 @@ Open a terminal and run:
 python3 cloud_server.py
 ```
 
-**Network**: Listens on **0.0.0.0:5000** (Accepts external connections).
+**Network**: Listens on `0.0.0.0:5000` (Accepts external connections).
 
-**Local Dashboard**: Access via **http://127.0.0.1:5000** in your browser.
+**Local Dashboard**: Access via `http://127.0.0.1:5000` in your browser.
 
-**Note**: The telemetry.db file is created automatically at runtime (it is not included in the repo).
+**Note**: The `telemetry.db` file is created automatically at runtime (it is not included in the repo).
 
 ### 3. Launch the flight simulation (the drone)
 Open a new terminal tab and run:
@@ -125,4 +126,4 @@ This script replays a historical flight from `flight_log.csv`. You will see it t
 ### 4. Monitor operations
 **Real-time**: Check the terminal for HTTP status codes.
 
-**Dashboard**: Open your browser and navigate to: http://127.0.0.1:5000 to see the flight data populating the table in real-time.
+**Dashboard**: Open your browser and navigate to: `http://127.0.0.1:5000` to see the flight data populating the table in real-time.

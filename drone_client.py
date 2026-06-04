@@ -26,8 +26,8 @@ def send_data_to_server(data):
 
     except requests.exceptions.Timeout:
         print(f"[High Latency] Request timed out for frame {data.get('timestamp')}. Possible network congestion.")
-    except requests.exceptions.ConnectionError:
-        print(f"[Connection Refused] Could not reach server. Is the Firewall blocking port 5000? Is the server down?")
+    except requests.exceptions.ConnectionError as e:
+        print(f"[Network Failure] Could not reach server. Diagnostics: {e}")
     except requests.exceptions.HTTPError as err:
         print(f"[Server Error] 4xx/5xx response: {err}. Check payload format or server logs.")
     except requests.exceptions.RequestException as e:
