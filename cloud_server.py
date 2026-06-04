@@ -1,6 +1,6 @@
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Flask, request, jsonify
 
 # --- Creates the database ---
@@ -38,7 +38,7 @@ def receive_telemetry():
     required_fields = ['drone_id', 'latitude', 'longitude', 'battery_level']
     if not all(field in data for field in required_fields):
         missing = [f for f in required_fields if f not in data]
-        print(f"[{datetime.utcnow().isoformat()}] [ERROR] Invalid Payload. Missing fields: {missing}")
+        print(f"[{datetime.now(timezone.utc).isoformat()}] [ERROR] Invalid Payload. Missing fields: {missing}")
         return jsonify({"status": "error", "message": "Missing required fields"}), 400
     
     try:
@@ -47,7 +47,7 @@ def receive_telemetry():
             cursor = conn.cursor()
 
             # If the drone sent a timestamp, use it. Otherwise, use server time.
-            log_timestamp = data.get('timestamp', datetime.utcnow().isoformat())
+            log_timestamp = data.get('timestamp', datetime.now(timezone.utc).isoformat())
             
             cursor.execute('''
                 INSERT INTO logs (timestamp, drone_id, latitude, longitude, battery_level)
@@ -59,11 +59,11 @@ def receive_telemetry():
             # but explicit commit here is fine too.
             conn.commit()
             
-        print(f"[{datetime.utcnow().isoformat()}] Received data from {data['drone_id']}")
+        print(f"[{datetime.now(timezone.utc).isoformat()}] Received data from {data['drone_id']}")
         return jsonify({"status": "success", "id": new_log_id}), 201
 
     except Exception as e:
-        print(f"[{datetime.utcnow().isoformat()}] Error processing request: {e}")
+        print(f"[{datetime.now(timezone.utc).isoformat()}] Error processing request: {e}")
         return jsonify({"status": "error", "message": "Internal server error"}), 500
 
 @app.route('/', methods=['GET'])
