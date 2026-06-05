@@ -9,7 +9,7 @@ A simulated IoT pipeline where a drone sends flight data to a cloud server to pr
 To create a controlled environment for reproducing and diagnosing common drone-to-cloud failure modes, such as packet loss, firewall blocking, and invalid or incomplete telemetry data.
 
 ## Architecture
-* **Client (`drone_client.py`):** Simulates a drone by reading historical flight logs (`flight_log.csv`) and sending telemetry via HTTP POST. It includes error handling for timeouts and network drops.
+* **Client (`drone_client.py`):** Simulates a drone by replaying historical flight logs (`flight_log.csv`) or generating live telemetry in real-time, and sends it via HTTP POST. It includes error handling for timeouts and network drops.
 * **Server (`cloud_server.py`):** A Flask-based REST API that validates incoming JSON payloads and stores flight history in a SQLite database.
 * **Dashboard:** A lightweight web interface for near-real-time visualization of stored telemetry data. 
 
@@ -77,13 +77,13 @@ sequenceDiagram
     Network->>Cloud: Forward request
     Cloud-->>Drone: 201 Created
     
-    Note over Drone, Network: Scenario 4a: Packet loss
+    Note over Drone, Network: Scenario 4a: Packet loss only
     Drone->>Network: POST /telemetry
     Network-xCloud: PACKET LOSS (20% drop rate)
     Drone->>Drone: Log: "[WARN] Simulated packet loss"
     Note right of Cloud: Server sees nothing (No 4xx/5xx)
     
-    Note over Drone, Network: Scenario 4b: High latency
+    Note over Drone, Network: Scenario 4b: High latency only
     Drone->>Network: POST /telemetry
     Network->>Network: Sleep(2.0s) jitter
     Network->>Cloud: Forward request
@@ -121,7 +121,10 @@ Open a new terminal tab and run:
 ```bash
 python3 drone_client.py
 ```
-This script replays a historical flight from `flight_log.csv`. You will see it transmitting coordinates every 2 seconds.
+This script has two modes controlled by the `SIMULATION_MODE` variable in `drone_client.py`:
+
+* `CSV` (default): Replays a historical flight from `flight_log.csv`.
+* `LIVE`: Generates continuous telemetry in real time, incrementing position and draining battery until manually stopped (**Ctrl+C**).
 
 ### 4. Monitor operations
 **Real-time**: Check the terminal for HTTP status codes.
