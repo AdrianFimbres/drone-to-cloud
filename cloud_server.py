@@ -2,9 +2,40 @@ import sqlite3
 import json
 import re
 from datetime import datetime, timezone
+from functools import wraps
 from flask import Flask, request, jsonify
 
 DB_NAME = 'telemetry.db'
+
+VALID_TOKENS = {
+    "token-rw-001": {"scope": "read_write"}, 
+    "token-ro-002": {"scope": "read_only"}, 
+}
+
+def require_auth(f):
+    """Checks Bearer token and scope before allowing access."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"status": "error", "message": "Unauthorized"}), 401
+            
+        parts = auth_header.split(' ')
+        if len(parts) != 2 or not parts[1]:
+            return jsonify({"status": "error", "message": "Unauthorized"}), 401
+            
+        token = parts[1]
+        
+        if token not in VALID_TOKENS:
+            return jsonify({"status": "error", "message": "Unauthorized"}), 401
+            
+        token_scope = VALID_TOKENS[token]["scope"]
+        if request.method == 'POST' and token_scope == 'read_only':
+            return jsonify({"status": "error", "message": "Forbidden: insufficient permissions"}), 403
+            
+        return f(*args, **kwargs)
+    return decorated_function
 
 def get_db_connection():
     """Helper to get a DB connection with Foreign Keys enabled."""
@@ -66,6 +97,7 @@ def is_valid_iso8601_z(timestamp_str):
     return re.match(pattern, timestamp_str) is not None
 
 @app.route('/api/telemetry', methods=['POST'])
+@require_auth
 def receive_telemetry():
     """API endpoint to receive and store drone telemetry data."""
     if not request.is_json:
@@ -116,8 +148,9 @@ def receive_telemetry():
         return jsonify({"status": "error", "message": "Internal server error while saving telemetry."}), 500
 
 @app.route('/', methods=['GET'])
+# NOTE: Intentionally left unauthenticated for visual dashboard debugging
 def view_logs():
-    """Displays all telemetry logs in a professional dark-mode HTML table."""
+    """Renders the last 50 telemetry records as an HTML dashboard."""
     try:
         with get_db_connection() as conn:
             conn.row_factory = sqlite3.Row

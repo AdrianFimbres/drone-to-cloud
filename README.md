@@ -23,6 +23,18 @@ vehicles (1) → flights (many) → telemetry (many)
 * **Networking:** HTTP/REST (Requests library), TCP/IP troubleshooting
 * **Data Format:** JSON & CSV (Simulating Flight Log Replay)
 
+## Authentication
+All POST endpoints require Bearer token authentication. The dashboard (GET /) is intentionally left open for local debugging.
+
+**Sandbox tokens:**
+* `token-rw-001`: read/write access (standard operational token).
+* `token-ro-002`: read-only access (triggers a 403 Forbidden on any POST request)
+
+To test authentication:
+* **Test 401 (Unknown Identity):** Change `AUTH_TOKEN` to `"bad-token"`. Client logs `[AUTH ERROR] Unauthorized`.
+* **Test 403 (Insufficient Permissions):** Change `AUTH_TOKEN` to `"token-ro-002"`. Client logs `[AUTH ERROR] Forbidden`.
+* In both cases the server and network are healthy; the database receives no new rows.
+
 ## Project structure
 
 ```

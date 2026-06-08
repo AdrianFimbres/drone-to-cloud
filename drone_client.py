@@ -16,6 +16,7 @@ SIMULATION_MODE = "CSV"
 PACKET_DROP_RATE = 0.2
 MIN_LATENCY = 0.5
 MAX_LATENCY = 2.0
+AUTH_TOKEN = "token-rw-001"
 
 def format_iso8601_z(raw_timestamp_str):
     """Converts the timestamp to strict UTC Z format. Warns if malformed."""
@@ -28,10 +29,21 @@ def format_iso8601_z(raw_timestamp_str):
         return fallback
 
 def send_data_to_server(data):
-    """Sends telemetry data to the server via POST request."""
-    headers = {'Content-Type': 'application/json'}
+    """Sends a telemetry payload to the cloud server."""
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {AUTH_TOKEN}'
+    }
     try:
         response = requests.post(SERVER_URL, data=json.dumps(data), headers=headers, timeout=5)
+
+        if response.status_code == 401:
+            print(f"[AUTH ERROR] Unauthorized: Missing or invalid token for frame {data.get('timestamp')}.")
+            return
+        elif response.status_code == 403:
+            print(f"[AUTH ERROR] Forbidden: Token lacks required scope for frame {data.get('timestamp')}.")
+            return
+        
         response.raise_for_status() 
         print(f"Sent frame {data.get('timestamp', 'N/A')}. Server: {response.json()}")
 
