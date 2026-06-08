@@ -1,22 +1,25 @@
 # Drone-to-Cloud telemetry & diagnostics testbed
 
-This is a small sandbox to explore and diagnose drone-to-cloud failure scenarios.
-
-A simulated IoT pipeline where a drone sends flight data to a cloud server to practice network troubleshooting, API integration, and system diagnostics across the network, application, and data layers.
-
-
-## Project goal
-To create a controlled environment for reproducing and diagnosing common drone-to-cloud failure modes, such as packet loss, firewall blocking, and invalid or incomplete telemetry data.
+A sandbox for reproducing and diagnosing drone-to-cloud failure scenarios: service crashes, firewall blocking, invalid payloads, packet loss, and network latency. Covers the network, application, and data layers.
 
 ## Architecture
-* **Client (`drone_client.py`):** Simulates a drone by replaying historical flight logs (`flight_log.csv`) or generating live telemetry in real-time, and sends it via HTTP POST. It includes error handling for timeouts and network drops.
-* **Server (`cloud_server.py`):** A Flask-based REST API that validates incoming JSON payloads and stores flight history in a SQLite database.
-* **Dashboard:** A lightweight web interface for near-real-time visualization of stored telemetry data. 
+* **Client (`drone_client.py`):** Simulates a drone by replaying historical flight logs (`flight_log.csv`) or generating live telemetry in real-time. It handles network timeouts, generates a unique session ID (`flight_id`) at startup, and enforces strict UTC timestamp formatting for all outbound HTTP POST requests.
+* **Server (`cloud_server.py`):** A Flask-based REST API. It validates incoming JSON telemetry against required fields and strict timestamp formats, then stores data in a structured, relational SQLite database.
+* **Dashboard:** A web interface that queries the relational database to provide a real-time view of flight status and telemetry. 
+
+## Data structure
+* **vehicles:** Hardware inventory, indexed by serial number.
+* **flights:** Individual flight sessions, linked to a vehicle.
+* **telemetry:** Raw flight data, linked to both the vehicle and the flight session.
+
+```
+vehicles (1) → flights (many) → telemetry (many)
+```
 
 ## Tech stack
 * **Language:** Python 3.x
 * **Framework:** Flask (Web API)
-* **Database:** SQLite (Persistent Logging)
+* **Database:** SQLite (Relational Logging)
 * **Networking:** HTTP/REST (Requests library), TCP/IP troubleshooting
 * **Data Format:** JSON & CSV (Simulating Flight Log Replay)
 
@@ -25,7 +28,7 @@ To create a controlled environment for reproducing and diagnosing common drone-t
 ```
 drone-to-cloud/
 ├── cloud_server.py       # Flask backend & SQLite database logic
-├── drone_client.py       # Client simulation (reads CSV & sends requests)
+├── drone_client.py       # Client simulation (CSV replay & live gen)
 ├── flight_log.csv        # Sample flight path
 ├── telemetry_api.json    # Postman collection for manual testing
 ├── requirements.txt      # Python dependencies
@@ -46,55 +49,25 @@ drone-to-cloud/
 
 * Symptom: Client logs `timeout` after `5s` hang.
 
-* Diagnosis: The system firewall is dropping packets before they reach the application.
+* Diagnosis: The firewall is blocking the connection before it reaches the application.
 
 ### Scenario 3: Integration failure (bad data)
-* Simulation: Modify `drone_client.py` to comment out the latitude field in the JSON payload (this will send incomplete JSON payloads.)
+* Simulation: Modify `drone_client.py` to comment out the `latitude` field in the payload.
 
-* Symptom: Server responds with `HTTP 400 Bad Request`.
+* Symptom: Server responds with `HTTP 400 Bad Request` and lists the missing required fields.
 
-* Diagnosis: Connection is good, but the JSON format is invalid.
+* Diagnosis: Connection is good but the payload fails server-side validation.
 
 ### Scenario 4: Network degradation (weak signal)
-* Simulation: Modify client script to introduce random latency (0.5s–2s) and 20% packet drop rate.
+* Simulation: Set `PACKET_DROP_RATE` to 0.0 and `MIN_LATENCY`/`MAX_LATENCY` to 0 to isolate other scenarios. Default values (0.2 drop rate, 0.5s–2s latency) keep this scenario always active.
 
 * Symptom: Dashboard updates become choppy; logs show intermittent gaps but no hard errors.
 
-* Diagnosis: Ping works and the server remains reachable (we can rule out a crash) as logs show sporadic `200 OK`. The issue is network instability (latency and packet loss) rather than the application failing.
-
-* Additional note: This scenario can sometimes be misdiagnosed as an application failure, leading to unnecessary engineering escalations.
-
-## Scenarios diagram
-
-```mermaid
-sequenceDiagram
-    participant Drone as Drone client
-    participant Network as Simulated network layer
-    participant Cloud as Cloud server
-    
-    Note over Drone, Network: Scenario 1: Normal operation
-    Drone->>Network: POST /telemetry (JSON)
-    Network->>Cloud: Forward request
-    Cloud-->>Drone: 201 Created
-    
-    Note over Drone, Network: Scenario 4a: Packet loss only
-    Drone->>Network: POST /telemetry
-    Network-xCloud: PACKET LOSS (20% drop rate)
-    Drone->>Drone: Log: "[WARN] Simulated packet loss"
-    Note right of Cloud: Server sees nothing (No 4xx/5xx)
-    
-    Note over Drone, Network: Scenario 4b: High latency only
-    Drone->>Network: POST /telemetry
-    Network->>Network: Sleep(2.0s) jitter
-    Network->>Cloud: Forward request
-    Cloud-->>Drone: 201 Created
-```
+* Diagnosis: Ping works and the server stays reachable. Sporadic 200 OK responses in the logs point to the application being healthy; the issue is network instability, not a crash.
 
 ## Future additions
 
-This project currently focuses on **TCP / REST–based telemetry** (reliable command-and-control). Future plans include adding **UDP / WebRTC** for low-latency video streaming to compare how bad networks affect video and data.
-* **Glitch vs. Disconnect:** How packet loss causes visual glitches in video (UDP) compared to when telemetry (TCP) just lags or disconnects.
-* **Field diagnosis:** Distinguish between a degraded video link and a network failure during UAS operations.
+UDP-based video streaming simulation to explore how the same network conditions affect video and telemetry differently, and how to distinguish a degraded video link from a true network failure in the field.
 
 ## How to run it
 
@@ -124,9 +97,9 @@ python3 drone_client.py
 This script has two modes controlled by the `SIMULATION_MODE` variable in `drone_client.py`:
 
 * `CSV` (default): Replays a historical flight from `flight_log.csv`.
-* `LIVE`: Generates continuous telemetry in real time, incrementing position and draining battery until manually stopped (**Ctrl+C**).
+* `LIVE`: Generates continuous telemetry in real time until the simulated battery depletes.
 
 ### 4. Monitor operations
 **Real-time**: Check the terminal for HTTP status codes.
 
-**Dashboard**: Open your browser and navigate to: `http://127.0.0.1:5000` to see the flight data populating the table in real-time.
+**Dashboard**: Navigate to `http://127.0.0.1:5000` to monitor incoming telemetry.
