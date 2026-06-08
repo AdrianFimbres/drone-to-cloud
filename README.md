@@ -5,6 +5,7 @@ A sandbox for reproducing and diagnosing drone-to-cloud failure scenarios: servi
 ## Architecture
 * **Client (`drone_client.py`):** Simulates a drone by replaying historical flight logs (`flight_log.csv`) or generating live telemetry in real-time. It handles network timeouts, generates a unique session ID (`flight_id`) at startup, and enforces strict UTC timestamp formatting for all outbound HTTP POST requests.
 * **Server (`cloud_server.py`):** A Flask-based REST API. It validates incoming JSON telemetry against required fields and strict timestamp formats, then stores data in a structured, relational SQLite database.
+* **ETL Pipeline (`etl_pipeline.py`):** Simulates batch processing of legacy flight data. Reads messy CSV exports, standardizes timestamps, strips unknown columns, and validates data types and ranges before pushing clean records to the cloud server.
 * **Dashboard:** A web interface that queries the relational database to provide a real-time view of flight status and telemetry. 
 
 ## Data structure
@@ -41,7 +42,9 @@ To test authentication:
 drone-to-cloud/
 ├── cloud_server.py       # Flask backend & SQLite database logic
 ├── drone_client.py       # Client simulation (CSV replay & live gen)
+├── etl_pipeline.py       # Standalone ETL script for legacy data migration
 ├── flight_log.csv        # Sample flight path
+├── legacy_flight_export.csv # Intentionally messy test data for ETL
 ├── telemetry_api.json    # Postman collection for manual testing
 ├── requirements.txt      # Python dependencies
 └── README.md             # Documentation
@@ -108,10 +111,17 @@ python3 drone_client.py
 ```
 This script has two modes controlled by the `SIMULATION_MODE` variable in `drone_client.py`:
 
-* `CSV` (default): Replays a historical flight from `flight_log.csv`.
+* `CSV` (default): Simulates a post-flight sync from a disconnected field operation using `flight_log.csv`.
 * `LIVE`: Generates continuous telemetry in real time until the simulated battery depletes.
 
-### 4. Monitor operations
+### 4. Run the legacy data migration (ETL pipeline)
+Open a new terminal and run:
+```bash
+python3 etl_pipeline.py
+```
+**Note**: In this test dataset, all rows use the legacy timestamp format, so the `[WARN]` tag appears on every row. In a real migration, warnings would be sparse and indicate specific rows requiring manual review.
+
+### 5. Monitor operations
 **Real-time**: Check the terminal for HTTP status codes.
 
 **Dashboard**: Navigate to `http://127.0.0.1:5000` to monitor incoming telemetry.
