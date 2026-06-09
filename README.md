@@ -12,7 +12,6 @@ A sandbox for reproducing and diagnosing drone-to-cloud failure scenarios: servi
 * **vehicles:** Hardware inventory, indexed by serial number.
 * **flights:** Individual flight sessions, linked to a vehicle.
 * **telemetry:** Raw flight data, linked to both the vehicle and the flight session.
-
 ```
 vehicles (1) → flights (many) → telemetry (many)
 ```
@@ -25,7 +24,7 @@ vehicles (1) → flights (many) → telemetry (many)
 * **Data Format:** JSON & CSV (Simulating Flight Log Replay)
 
 ## Authentication
-All POST endpoints require Bearer token authentication. The dashboard (GET /) is intentionally left open for local debugging.
+All endpoints except the root dashboard require Bearer token authentication. The dashboard (GET /) is intentionally left open for local debugging.
 
 **Sandbox tokens:**
 * `token-rw-001`: read/write access (standard operational token).
@@ -36,8 +35,30 @@ To test authentication:
 * **Test 403 (Insufficient Permissions):** Change `AUTH_TOKEN` to `"token-ro-002"`. Client logs `[AUTH ERROR] Forbidden`.
 * In both cases the server and network are healthy; the database receives no new rows.
 
-## Project structure
+## API Endpoints
+All endpoints except the root dashboard require `Authorization: Bearer <token>`.
 
+* **`POST /api/telemetry`**: Receives and stores a telemetry record.
+* **`GET /api/flights`**: Returns all flights with session metadata and telemetry row counts.
+* **`GET /api/flight/<flight_id>/telemetry`**: Returns all telemetry records for a specific flight. Returns `404` if the flight does not exist.
+
+**Example response (`GET /api/flights`):**
+```json
+{
+  "flights": [
+    {
+      "flight_id": "flt_manual_test_001",
+      "vehicle_serial": "v-SIM-001",
+      "started_at": "2026-01-06T10:00:00Z",
+      "ended_at": null,
+      "state": "FLYING",
+      "telemetry_count": 12
+    }
+  ]
+}
+```
+
+## Project structure
 ```
 drone-to-cloud/
 ├── cloud_server.py       # Flask backend & SQLite database logic

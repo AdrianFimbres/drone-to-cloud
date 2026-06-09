@@ -2,15 +2,20 @@
     "info": {
         "_postman_id": "03a0817c-f519-487b-9623-6aeed68d6d73",
         "name": "Drone_Telemetry_Project",
-        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-        "_exporter_id": "50920646"
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "item": [
         {
             "name": "Valid Payload (201 Created)",
             "request": {
                 "method": "POST",
-                "header": [],
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer token-rw-001",
+                        "type": "text"
+                    }
+                ],
                 "body": {
                     "mode": "raw",
                     "raw": "{\n  \"flight_id\": \"flt_manual_test_001\",\n  \"vehicle_serial\": \"v-SIM-001\",\n  \"timestamp\": \"2026-01-06T10:00:00Z\",\n  \"latitude\": 34.1184,\n  \"longitude\": -118.3004,\n  \"altitude_agl\": 120.0,\n  \"speed\": 12.0,\n  \"heading\": 90.0,\n  \"battery_level\": 98,\n  \"state\": \"FLYING\"\n}",
@@ -26,10 +31,16 @@
             }
         },
         {
-            "name": "Invalid Payload – Missing Required Fields (400)",
+            "name": "Invalid Payload – Missing Fields (400)",
             "request": {
                 "method": "POST",
-                "header": [],
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer token-rw-001",
+                        "type": "text"
+                    }
+                ],
                 "body": {
                     "mode": "raw",
                     "raw": "{\n  \"flight_id\": \"flt_manual_test_001\",\n  \"vehicle_serial\": \"v-SIM-001\"\n}",
@@ -41,6 +52,91 @@
                     "host": ["127", "0", "0", "1"],
                     "port": "5000",
                     "path": ["api", "telemetry"]
+                }
+            }
+        },
+        {
+            "name": "Unauthorized Request (401)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer bad-token",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"flight_id\": \"flt_manual_test_001\",\n  \"vehicle_serial\": \"v-SIM-001\",\n  \"timestamp\": \"2026-01-06T10:00:00Z\",\n  \"latitude\": 34.1184,\n  \"longitude\": -118.3004,\n  \"altitude_agl\": 120.0,\n  \"speed\": 12.0,\n  \"heading\": 90.0,\n  \"battery_level\": 98,\n  \"state\": \"FLYING\"\n}",
+                    "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                    "raw": "http://127.0.0.1:5000/api/telemetry",
+                    "protocol": "http",
+                    "host": ["127", "0", "0", "1"],
+                    "port": "5000",
+                    "path": ["api", "telemetry"]
+                }
+            }
+        },
+        {
+            "name": "Get All Flights (200 OK)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer token-rw-001",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "http://127.0.0.1:5000/api/flights",
+                    "protocol": "http",
+                    "host": ["127", "0", "0", "1"],
+                    "port": "5000",
+                    "path": ["api", "flights"]
+                }
+            }
+        },
+        {
+            "name": "Get Flight Telemetry (200 OK)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer token-rw-001",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "http://127.0.0.1:5000/api/flight/flt_manual_test_001/telemetry",
+                    "protocol": "http",
+                    "host": ["127", "0", "0", "1"],
+                    "port": "5000",
+                    "path": ["api", "flight", "flt_manual_test_001", "telemetry"]
+                }
+            }
+        },
+        {
+            "name": "Get Flight Telemetry – Not Found (404)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer token-rw-001",
+                        "type": "text"
+                    }
+                ],
+                "url": {
+                    "raw": "http://127.0.0.1:5000/api/flight/flt_does_not_exist/telemetry",
+                    "protocol": "http",
+                    "host": ["127", "0", "0", "1"],
+                    "port": "5000",
+                    "path": ["api", "flight", "flt_does_not_exist", "telemetry"]
                 }
             }
         }

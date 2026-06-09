@@ -44,7 +44,7 @@ def get_db_connection():
     return conn
 
 def init_db():
-    """Initializes the database and creates the relational tables if they don't exist."""
+    """Creates the database and schema if they don't exist."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
@@ -92,14 +92,14 @@ def init_db():
 app = Flask(__name__)
 
 def is_valid_iso8601_z(timestamp_str):
-    """Strictly checks if a string is a valid ISO 8601 UTC timestamp ending in Z."""
+    """Validates ISO 8601 UTC timestamps."""
     pattern = r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$'
     return re.match(pattern, timestamp_str) is not None
 
 @app.route('/api/telemetry', methods=['POST'])
 @require_auth
 def receive_telemetry():
-    """API endpoint to receive and store drone telemetry data."""
+    """Receives and stores incoming telemetry."""
     if not request.is_json:
         return jsonify({"status": "error", "message": "Invalid format: JSON required"}), 400
     
@@ -146,6 +146,64 @@ def receive_telemetry():
     except Exception as e:
         print(f"[ERROR] Database insertion failed: {str(e)}") 
         return jsonify({"status": "error", "message": "Internal server error while saving telemetry."}), 500
+    
+@app.route('/api/flights', methods=['GET'])
+@require_auth
+def get_flights():
+    """Returns all flights and their total telemetry row counts."""
+    try:
+        with get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT f.flight_id, f.vehicle_serial, f.started_at, f.ended_at, f.state,
+                       COUNT(t.id) as telemetry_count
+                FROM flights f
+                LEFT JOIN telemetry t ON f.flight_id = t.flight_id
+                GROUP BY f.flight_id
+                ORDER BY f.started_at DESC
+            ''')
+            rows = cursor.fetchall()
+            
+            flights = [dict(row) for row in rows]
+            return jsonify({"flights": flights}), 200
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch flights: {str(e)}")
+        return jsonify({"status": "error", "message": "Internal server error."}), 500
+    
+@app.route('/api/flight/<flight_id>/telemetry', methods=['GET'])
+@require_auth
+def get_flight_telemetry(flight_id):
+    """Returns all telemetry for a given flight."""
+    try:
+        with get_db_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT flight_id FROM flights WHERE flight_id = ?', (flight_id,))
+            if not cursor.fetchone():
+                return jsonify({"status": "error", "message": "Flight not found"}), 404
+                
+            cursor.execute('''
+                SELECT timestamp, latitude, longitude, altitude_agl, speed, 
+                       heading, battery_level, state
+                FROM telemetry
+                WHERE flight_id = ?
+                ORDER BY timestamp ASC
+            ''', (flight_id,))
+            rows = cursor.fetchall()
+            
+            telemetry = [dict(row) for row in rows]
+            return jsonify({
+                "flight_id": flight_id,
+                "telemetry": telemetry
+            }), 200
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch telemetry for flight {flight_id}: {str(e)}")
+        return jsonify({"status": "error", "message": "Internal server error."}), 500
 
 @app.route('/', methods=['GET'])
 # NOTE: Intentionally left unauthenticated for visual dashboard debugging
@@ -174,6 +232,17 @@ def view_logs():
                 padding: 20px; 
             }
             h2 { color: #FFFFFF; font-weight: 300; }
+            .api-links {
+                background-color: #1A1A1A;
+                padding: 15px;
+                border: 1px solid #333;
+                border-radius: 4px;
+                margin-bottom: 20px;
+                font-size: 0.9rem;
+            }
+            .api-links a { color: #4CAF50; text-decoration: none; margin-right: 20px; font-weight: 600; }
+            .api-links a:hover { text-decoration: underline; }
+            .api-links code { background-color: #252525; padding: 2px 6px; border-radius: 3px; color: #FFA500; }
             table { border-collapse: collapse; width: 100%; border: 1px solid #333; }
             th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #333; }
             th { 
@@ -188,6 +257,15 @@ def view_logs():
             tr:hover { background-color: #252525; }
         </style></head><body>
         <h2>Telemetry Dashboard</h2>
+
+        <div class="api-links">
+            <strong>REST Endpoints:</strong><br><br>
+            <a href="/api/flights">GET /api/flights</a> 
+            <span style="color: #AAA;">(Requires Bearer Auth)</span><br><br>
+            <a href="#">GET /api/flight/<code>&lt;flight_id&gt;</code>/telemetry</a>
+            <span style="color: #AAA;">(Requires Bearer Auth)</span>
+        </div>
+
         <table><tr><th>ID</th><th>Vehicle</th><th>Flight ID</th><th>Time</th><th>Alt (AGL)</th><th>Speed</th><th>Bat %</th><th>State</th></tr>
         """
         for row in rows:
