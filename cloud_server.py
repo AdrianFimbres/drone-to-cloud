@@ -1,6 +1,11 @@
 import sqlite3
 import json
 import re
+import threading
+import time
+import requests
+import hmac
+import hashlib
 from datetime import datetime, timezone
 from functools import wraps
 from flask import Flask, request, jsonify
@@ -11,6 +16,58 @@ VALID_TOKENS = {
     "token-rw-001": {"scope": "read_write"}, 
     "token-ro-002": {"scope": "read_only"}, 
 }
+
+WEBHOOK_URL = "http://127.0.0.1:5001/webhook"
+WEBHOOK_SECRET = "super_secret_webhook_key"
+
+# Format: flight_id -> {'last_state': str, 'last_seen': datetime, 
+# 'battery_alerted': bool, 'stale_alerted': bool, 'vehicle_serial': str}
+flight_states = {}
+
+def send_webhook(event, flight_id, vehicle_serial, data):
+    """Generates an HMAC-SHA256 signature and sends a webhook POST payload."""
+    payload = {
+        "event": event,
+        "flight_id": flight_id,
+        "vehicle_serial": vehicle_serial,
+        "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        "data": data
+    }
+    
+    payload_bytes = json.dumps(payload, separators=(',', ':')).encode('utf-8')
+    
+    signature = hmac.new(WEBHOOK_SECRET.encode('utf-8'), payload_bytes, hashlib.sha256).hexdigest()
+    
+    headers = {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': f"sha256={signature}"
+    }
+    
+    try:
+        requests.post(WEBHOOK_URL, data=payload_bytes, headers=headers, timeout=3)
+        print(f"[WEBHOOK] Dispatched '{event}' for {flight_id}")
+    except requests.exceptions.RequestException as e:
+        print(f"[WEBHOOK ERROR] Failed to deliver '{event}' to {WEBHOOK_URL}: {e}")
+
+def stale_telemetry_monitor():
+    """Background task to detect flight feeds that have gone dark (Rule 3)."""
+    while True:
+        now = datetime.now(timezone.utc)
+        for flight_id, state_info in list(flight_states.items()):
+            if not state_info.get('stale_alerted'):
+                delta = (now - state_info['last_seen']).total_seconds()
+                if delta > 30:
+                    send_webhook(
+                        event="vehicle.telemetry.stale",
+                        flight_id=flight_id,
+                        vehicle_serial=state_info['vehicle_serial'],
+                        data={
+                            "last_seen": state_info['last_seen'].strftime('%Y-%m-%dT%H:%M:%SZ'),
+                            "seconds_since_last_telemetry": int(delta)
+                        }
+                    )
+                    state_info['stale_alerted'] = True
+        time.sleep(5)
 
 def require_auth(f):
     """Checks Bearer token and scope before allowing access."""
@@ -113,6 +170,11 @@ def receive_telemetry():
         
     if not is_valid_iso8601_z(data.get('timestamp')):
         return jsonify({"status": "error", "message": "Timestamp must be ISO 8601 UTC ending with 'Z'"}), 400
+    
+    flight_id = data['flight_id']
+    vehicle_serial = data['vehicle_serial']
+    current_state = data.get('state', 'FLYING')
+    battery = data['battery_level']
 
     try:
         with get_db_connection() as conn:
@@ -140,6 +202,44 @@ def receive_telemetry():
             ))
             
             conn.commit()
+
+        now = datetime.now(timezone.utc)
+        
+        if flight_id not in flight_states:
+            flight_states[flight_id] = {
+                'last_state': current_state,
+                'last_seen': now,
+                'battery_alerted': False,
+                'stale_alerted': False,
+                'vehicle_serial': vehicle_serial
+            }
+            
+        state_info = flight_states[flight_id]
+        prev_state = state_info['last_state']
+        
+        state_info['last_seen'] = now
+        state_info['last_state'] = current_state
+        if state_info['stale_alerted']:
+            state_info['stale_alerted'] = False 
+
+        def evaluate_rules():
+            if battery < 20 and not state_info.get('battery_alerted'):
+                send_webhook("vehicle.battery.critical", flight_id, vehicle_serial, {
+                    "battery_level": battery,
+                    "latitude": data['latitude'],
+                    "longitude": data['longitude']
+                })
+                state_info['battery_alerted'] = True
+            elif battery >= 20:
+                state_info['battery_alerted'] = False 
+
+            if prev_state != current_state and current_state in ['LANDING', 'DOCKED']:
+                send_webhook("vehicle.state.changed", flight_id, vehicle_serial, {
+                    "previous_state": prev_state,
+                    "new_state": current_state
+                })
+                
+        threading.Thread(target=evaluate_rules).start()
             
         return jsonify({"status": "success", "message": "Telemetry processed"}), 201
 
@@ -278,5 +378,10 @@ def view_logs():
 
 if __name__ == '__main__':
     init_db()
+
+    monitor_thread = threading.Thread(target=stale_telemetry_monitor, daemon=True)
+    monitor_thread.start()
+    print("Background stale telemetry monitor started.")
+
     # NOTE: Debug mode is enabled to catch request handling errors
-    app.run(host='0.0.0.0', debug=True, port=5000)
+    app.run(host='0.0.0.0', debug=True, port=5000, use_reloader=False)
