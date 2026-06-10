@@ -36,10 +36,17 @@ To test authentication:
 * **Test 403 (Insufficient Permissions):** Change `AUTH_TOKEN` to `"token-ro-002"`. Client logs `[AUTH ERROR] Forbidden`.
 * In both cases the server and network are healthy; the database receives no new rows.
 
+## Rate Limiting
+`POST /api/telemetry` is rate limited to 10 requests per 10 seconds per IP.
+
+To test rate limiting:
+* In `drone_client.py`, set `MIN_LATENCY` to `0.1`, `MAX_LATENCY` to `0.2`, and comment out `time.sleep(5)` in `run_live_simulation()`.
+* Run the client in `LIVE` mode. The client will log `[RATE LIMITED] Server throttled request. Retry after 10s.` and back off automatically.
+
 ## API Endpoints
 All endpoints except the root dashboard require `Authorization: Bearer <token>`.
 
-* **`POST /api/telemetry`**: Receives and stores a telemetry record.
+* **`POST /api/telemetry`**: Receives and stores a telemetry record. **Rate limited to 10 requests per 10 seconds per IP.**
 * **`GET /api/flights`**: Returns all flights with session metadata and telemetry row counts.
 * **`GET /api/flight/<flight_id>/telemetry`**: Returns all telemetry records for a specific flight. Returns `404` if the flight does not exist.
 

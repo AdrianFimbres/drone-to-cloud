@@ -6,7 +6,8 @@ import uuid
 import random
 from datetime import datetime, timezone
 
-# NOTE: This client intentionally avoids retries to preserve raw network behavior for diagnostics.
+# NOTE: This client intentionally avoids retries to preserve raw network behavior for diagnostics,
+# except in the specific case of an HTTP 429 Too Many Requests response.
 
 SERVER_URL = "http://127.0.0.1:5000/api/telemetry"
 VEHICLE_SERIAL = "v-SIM-001" 
@@ -28,14 +29,32 @@ def format_iso8601_z(raw_timestamp_str):
         print(f"[WARN] Malformed timestamp '{raw_timestamp_str}'. Substituting server time: {fallback}")
         return fallback
 
-def send_data_to_server(data):
-    """Sends a telemetry payload to the cloud server."""
+def send_data_to_server(data, attempt=1):
+    """Sends a telemetry payload to the cloud server with a single retry for 429 errors."""
     headers = {
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {AUTH_TOKEN}'
     }
     try:
         response = requests.post(SERVER_URL, data=json.dumps(data), headers=headers, timeout=5)
+
+        if response.status_code == 429:
+            retry_after_val = response.headers.get("Retry-After")
+            if not retry_after_val:
+                try:
+                    retry_after_val = response.json().get("retry_after", 10)
+                except Exception:
+                    retry_after_val = 10
+            
+            retry_after = int(retry_after_val)
+            print(f"[RATE LIMITED] Server throttled request. Retry after {retry_after}s.")
+            
+            if attempt == 1:
+                time.sleep(retry_after)
+                return send_data_to_server(data, attempt=2)
+            else:
+                print(f"[RATE LIMITED] Second attempt failed. Abandoning frame {data.get('timestamp')}.")
+                return
 
         if response.status_code == 401:
             print(f"[AUTH ERROR] Unauthorized: Missing or invalid token for frame {data.get('timestamp')}.")
