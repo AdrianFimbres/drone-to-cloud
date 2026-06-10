@@ -9,6 +9,8 @@ import hashlib
 from datetime import datetime, timezone
 from functools import wraps
 from flask import Flask, request, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 DB_NAME = 'telemetry.db'
 
@@ -148,12 +150,29 @@ def init_db():
 
 app = Flask(__name__)
 
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri="memory://"
+)
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    """Custom JSON response for rate limits."""
+    return jsonify({
+        "status": "error",
+        "message": "Too Many Requests",
+        "retry_after": 10
+    }), 429
+
 def is_valid_iso8601_z(timestamp_str):
     """Validates ISO 8601 UTC timestamps."""
     pattern = r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$'
     return re.match(pattern, timestamp_str) is not None
 
 @app.route('/api/telemetry', methods=['POST'])
+@limiter.limit("10 per 10 seconds")
 @require_auth
 def receive_telemetry():
     """Receives and stores incoming telemetry."""
