@@ -8,6 +8,7 @@ A sandbox for reproducing and diagnosing drone-to-cloud failure scenarios: servi
 * **ETL Pipeline (`etl_pipeline.py`):** Simulates batch processing of legacy flight data. Reads messy CSV exports, standardizes timestamps, strips unknown columns, and validates data types and ranges before pushing clean records to the cloud server.
 * **Dashboard:** A web interface that queries the relational database to provide a real-time view of flight status and telemetry.
 * **Webhook Receiver (`webhook_receiver.py`):** A mock webhook receiver running on port 5001. It listens for outbound POST requests from the cloud server and verifies the payload signature using HMAC-SHA256.
+* **Salesforce Sync (`salesforce_sync.py`):** Reads completed flights from SQLite and upserts aggregated summaries into a Salesforce custom object via the REST API.
 
 ## Data structure
 * **vehicles:** Hardware inventory, indexed by serial number.
@@ -23,6 +24,7 @@ vehicles (1) → flights (many) → telemetry (many)
 * **Database:** SQLite (Relational Logging)
 * **Networking:** HTTP/REST (Requests library), TCP/IP troubleshooting
 * **Data Format:** JSON & CSV (Simulating Flight Log Replay)
+* **CRM Integration:** Salesforce REST API, OAuth 2.0 (Username-Password Flow)
 
 ## Authentication
 All endpoints except the root dashboard require Bearer token authentication. The dashboard (GET /) is intentionally left open for local debugging.
@@ -92,13 +94,31 @@ All outbound webhooks include an `X-Webhook-Signature` header. The payload is si
 }
 ```
 
+## Salesforce Integration (CRM Sync)
+Pushes completed flight summaries from SQLite into a Salesforce custom object via the REST API.
+
+**Schema Requirements:**
+The target Salesforce org must contain a Custom Object named `DroneFlightLog__c` with the following API field names: `Vehicle_Serial__c` (Text), `Started_At__c` (Date/Time), `Ended_At__c` (Date/Time), `Final_State__c` (Text), `Telemetry_Count__c` (Number), and `Battery_At_Landing__c` (Number). 
+* `Flight_ID__c` must be created as a Text field with `External ID` and `Unique` checked. This is what allows the PATCH request to upsert without duplicating records.
+
+**Authentication:**
+Configure a Salesforce Connected App with "Relax IP restrictions" and enable "Allow OAuth Username-Password Flows" in your org's OAuth settings. Export your credentials in your terminal (wrap strings in single quotes `''` to avoid OS parsing errors):
+```bash
+export SF_CLIENT_ID='your_consumer_key'
+export SF_CLIENT_SECRET='your_consumer_secret'
+export SF_USERNAME='username@agentforce.com'
+export SF_PASSWORD='your_raw_password'
+```
+In production this would run on a schedule via a cron job, Apache Airflow DAG, or AWS Lambda triggered by an EventBridge rule rather than manually.
+
 ## Project structure
 ```
 drone-to-cloud/
 ├── cloud_server.py          # Flask backend & SQLite database logic
-├── webhook_receiver.py      # Mock webhook receiver with HMAC-SHA256 validation
 ├── drone_client.py          # Client simulation (CSV replay & live gen)
 ├── etl_pipeline.py          # Standalone ETL script for legacy data migration
+├── salesforce_sync.py       # Pushes completed flight summaries to Salesforce CRM
+├── webhook_receiver.py      # Mock webhook receiver with HMAC-SHA256 validation
 ├── flight_log.csv           # Sample flight path
 ├── legacy_flight_export.csv # Intentionally messy test data for ETL
 ├── telemetry_api.json       # Postman collection for manual testing
@@ -187,3 +207,9 @@ python3 etl_pipeline.py
 **Real-time**: Check the terminal for HTTP status codes.
 
 **Dashboard**: Navigate to `http://127.0.0.1:5000` to monitor incoming telemetry.
+
+### 7. Sync completed flights to Salesforce
+Run after the flight simulation or ETL pipeline to sync completed flights to Salesforce. Open a terminal with your exported `SF_` environment variables and run:
+```bash
+python3 salesforce_sync.py
+```
